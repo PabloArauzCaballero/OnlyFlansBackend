@@ -1,6 +1,7 @@
 const { verifyAccessToken } = require("../core/jwt/jwt");
+const { SesionUsuario } = require("../core/db/db.associations");
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
 
@@ -21,13 +22,50 @@ function requireAuth(req, res, next) {
 
     const decoded = verifyAccessToken(token);
 
+    if (decoded.tokenUse && decoded.tokenUse !== "access") {
+      return res.status(401).json({
+        success: false,
+        message: "Token inválido para acceso.",
+      });
+    }
+
+    const idUsuario = decoded.id_usuario || decoded.sub || null;
+    const idSesion = decoded.id_sesion || null;
+
+    if (!idUsuario || !idSesion) {
+      return res.status(401).json({
+        success: false,
+        message: "Token inválido. No contiene usuario o sesión.",
+      });
+    }
+
+    const activeSession = await SesionUsuario.findOne({
+      where: {
+        id_sesion: idSesion,
+        id_usuario: idUsuario,
+        fecha_cierre: null,
+        estado_registro: "ACTIVO",
+      },
+    });
+
+    if (!activeSession) {
+      return res.status(401).json({
+        success: false,
+        message: "Sesión inválida, cerrada o expirada.",
+      });
+    }
+
     req.user = {
-      id_usuario: decoded.id_usuario || decoded.sub || null,
+      id_usuario: idUsuario,
       nombre: decoded.nombre || decoded.nombre_usuario || null,
       email: decoded.email || null,
       rol: decoded.rol || decoded.role || decoded.tipo_usuario || "user",
       role: decoded.role || decoded.rol || decoded.tipo_usuario || "user",
       tokenUse: decoded.tokenUse,
+    };
+
+    req.session = {
+      id_sesion: idSesion,
     };
 
     return next();

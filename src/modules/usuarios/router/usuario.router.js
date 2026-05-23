@@ -11,17 +11,11 @@ const {
 } = require("../../../../middlewares/validate.middleware");
 
 const {
-  createSchema,
   updateSchema,
   idSchema,
   querySchema,
 } = require("../schema/usuario.schema");
 
-router.post(
-  "/",
-  validateBody(createSchema, logger, "usuario_creation"),
-  UsuarioController.create
-);
 
 router.put(
   "/:id_usuario",

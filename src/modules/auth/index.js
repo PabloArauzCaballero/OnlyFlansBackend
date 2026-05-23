@@ -1,7 +1,6 @@
 const router = require("express").Router();
 
-router.use("/sesiones", require("./router/sesion_usuario.router"));
-router.use("/logs", require("./router/logs.router"));
+router.use("/", require("./router/auth.router"));
 
 module.exports = {
   moduleName: "auth",

@@ -11,17 +11,11 @@ const {
 } = require("../../../../middlewares/validate.middleware");
 
 const {
-  createSchema,
   updateSchema,
   idSchema,
   querySchema,
 } = require("../schema/perfil_seguidor.schema");
 
-router.post(
-  "/",
-  validateBody(createSchema, logger, "perfil_seguidor_creation"),
-  PerfilSeguidorController.create
-);
 
 router.put(
   "/:id_usuario",

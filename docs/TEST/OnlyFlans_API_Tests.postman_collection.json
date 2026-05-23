@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "OnlyFlans API - Tests completos",
-    "description": "Colección para probar todos los endpoints CRUD y el endpoint transaccional POST /api/publicaciones/con-imagenes.",
+    "description": "Colección actualizada: registro transaccional de creador/seguidor, login con creación interna de sesión, logout y CRUD restante. Las rutas públicas de sesiones y logs fueron eliminadas.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -41,10 +41,10 @@
       ]
     },
     {
-      "name": "01 - Usuarios",
+      "name": "00 - Auth y registro transaccional",
       "item": [
         {
-          "name": "Crear usuario creador",
+          "name": "Registrar creador",
           "request": {
             "method": "POST",
             "header": [
@@ -54,18 +54,20 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/usuarios",
+              "raw": "{{baseUrl}}/api/auth/registro/creador",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "usuarios"
+                "auth",
+                "registro",
+                "creador"
               ]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nombre\": \"Creador Demo {{$timestamp}}\",\n  \"email\": \"creador_{{$timestamp}}@onlyflans.test\",\n  \"password_hash\": \"hash_creador_demo_123456789\",\n  \"rol\": \"CREADOR\",\n  \"url_imagen_portada\": \"https://example.com/portada-creador.jpg\",\n  \"imagen_perfil\": \"https://example.com/perfil-creador.jpg\"\n}"
+              "raw": "{\n  \"usuario\": {\n    \"nombre\": \"Creador Demo Postman\",\n    \"email\": \"creador.demo.1779543831@onlyflans.com\",\n    \"password\": \"Password123\",\n    \"url_imagen_portada\": \"https://example.com/portada-creador.png\",\n    \"imagen_perfil\": \"https://example.com/perfil-creador.png\"\n  },\n  \"perfil_creador\": {\n    \"nombre_publico\": \"Creador Demo Postman\",\n    \"biografia\": \"Perfil creado desde Postman.\",\n    \"foto_perfil_url\": \"https://example.com/foto-creador.png\",\n    \"banner_url\": \"https://example.com/banner-creador.png\"\n  }\n}"
             }
           },
           "response": [],
@@ -78,14 +80,17 @@
                   "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
                   "const json = pm.response.json();",
                   "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });",
-                  "if (json.data && json.data.id_usuario !== undefined && json.data && json.data.id_usuario !== null) pm.collectionVariables.set('id_creador', json.data && json.data.id_usuario);"
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.usuario && json.data.usuario.id_usuario) pm.collectionVariables.set('id_creador', json.data.usuario.id_usuario);",
+                  "pm.collectionVariables.set('creatorEmail', 'creador.demo.1779543831@onlyflans.com');",
+                  "pm.collectionVariables.set('password', 'Password123');"
                 ]
               }
             }
           ]
         },
         {
-          "name": "Crear usuario seguidor",
+          "name": "Registrar seguidor",
           "request": {
             "method": "POST",
             "header": [
@@ -95,18 +100,20 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/usuarios",
+              "raw": "{{baseUrl}}/api/auth/registro/seguidor",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
-                "usuarios"
+                "auth",
+                "registro",
+                "seguidor"
               ]
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"nombre\": \"Seguidor Demo {{$timestamp}}\",\n  \"email\": \"seguidor_{{$timestamp}}@onlyflans.test\",\n  \"password_hash\": \"hash_seguidor_demo_123456789\",\n  \"rol\": \"SEGUIDOR\",\n  \"url_imagen_portada\": \"https://example.com/portada-seguidor.jpg\",\n  \"imagen_perfil\": \"https://example.com/perfil-seguidor.jpg\"\n}"
+              "raw": "{\n  \"usuario\": {\n    \"nombre\": \"Seguidor Demo Postman\",\n    \"email\": \"seguidor.demo.1779543831@onlyflans.com\",\n    \"password\": \"Password123\",\n    \"url_imagen_portada\": \"https://example.com/portada-seguidor.png\",\n    \"imagen_perfil\": \"https://example.com/perfil-seguidor.png\"\n  },\n  \"perfil_seguidor\": {\n    \"nombre_visible\": \"Seguidor Demo Postman\"\n  }\n}"
             }
           },
           "response": [],
@@ -119,12 +126,146 @@
                   "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
                   "const json = pm.response.json();",
                   "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });",
-                  "if (json.data && json.data.id_usuario !== undefined && json.data && json.data.id_usuario !== null) pm.collectionVariables.set('id_seguidor', json.data && json.data.id_usuario);"
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.usuario && json.data.usuario.id_usuario) pm.collectionVariables.set('id_seguidor', json.data.usuario.id_usuario);",
+                  "pm.collectionVariables.set('followerEmail', 'seguidor.demo.1779543831@onlyflans.com');"
                 ]
               }
             }
           ]
         },
+        {
+          "name": "Login creador",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{creatorEmail}}\",\n  \"password\": \"{{password}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });",
+                  "const json = pm.response.json();",
+                  "if (json.data && json.data.accessToken) pm.collectionVariables.set('accessToken', json.data.accessToken);",
+                  "if (json.data && json.data.refreshToken) pm.collectionVariables.set('refreshToken', json.data.refreshToken);",
+                  "if (json.data && json.data.session && json.data.session.id_sesion) pm.collectionVariables.set('id_sesion', json.data.session.id_sesion);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Obtener usuario autenticado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout creador",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
+                  "const json = pm.response.json();",
+                  "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 - Usuarios",
+      "item": [
         {
           "name": "Listar usuarios",
           "request": {
@@ -254,88 +395,6 @@
     {
       "name": "02 - Perfiles",
       "item": [
-        {
-          "name": "Crear perfil creador",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/usuarios/perfiles-creadores",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "usuarios",
-                "perfiles-creadores"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id_usuario\": \"{{id_creador}}\",\n  \"nombre_publico\": \"Creador Público Demo\",\n  \"biografia\": \"Biografía de prueba para Postman\",\n  \"foto_perfil_url\": \"https://example.com/foto-creador.jpg\",\n  \"banner_url\": \"https://example.com/banner-creador.jpg\"\n}"
-            }
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
-                  "const json = pm.response.json();",
-                  "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Crear perfil seguidor",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/usuarios/perfiles-seguidores",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "usuarios",
-                "perfiles-seguidores"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id_usuario\": \"{{id_seguidor}}\",\n  \"nombre_visible\": \"Seguidor Visible Demo\"\n}"
-            }
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
-                  "const json = pm.response.json();",
-                  "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });"
-                ]
-              }
-            }
-          ]
-        },
         {
           "name": "Listar perfiles creadores",
           "request": {
@@ -573,349 +632,6 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"nombre_visible\": \"Seguidor Visible Actualizado\"\n}"
-            }
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
-                  "const json = pm.response.json();",
-                  "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });"
-                ]
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "03 - Auth, sesiones y logs",
-      "item": [
-        {
-          "name": "Crear sesión de usuario",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/sesiones",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "sesiones"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id_usuario\": \"{{id_creador}}\",\n  \"ip\": \"127.0.0.1\",\n  \"user_agent\": \"Postman Runtime\"\n}"
-            }
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
-                  "const json = pm.response.json();",
-                  "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });",
-                  "if (json.data && json.data.id_sesion !== undefined && json.data && json.data.id_sesion !== null) pm.collectionVariables.set('id_sesion', json.data && json.data.id_sesion);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Listar sesiones",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/sesiones?limit=20&offset=0",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "sesiones"
-              ],
-              "query": [
-                {
-                  "key": "limit",
-                  "value": "20"
-                },
-                {
-                  "key": "offset",
-                  "value": "0"
-                }
-              ]
-            }
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
-                  "const json = pm.response.json();",
-                  "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Obtener sesión",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/sesiones/{{id_sesion}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "sesiones",
-                "{{id_sesion}}"
-              ]
-            }
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
-                  "const json = pm.response.json();",
-                  "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Actualizar/cerrar sesión",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/sesiones/{{id_sesion}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "sesiones",
-                "{{id_sesion}}"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"fecha_cierre\": \"{{$isoTimestamp}}\"\n}"
-            }
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
-                  "const json = pm.response.json();",
-                  "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Crear log",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/logs",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "logs"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"id_sesion\": \"{{id_sesion}}\",\n  \"id_usuario\": \"{{id_creador}}\",\n  \"accion\": \"POSTMAN_TEST\",\n  \"metadata\": {\n    \"source\": \"postman\",\n    \"step\": \"crear_log\"\n  }\n}"
-            }
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 201', function () { pm.response.to.have.status(201); });",
-                  "const json = pm.response.json();",
-                  "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });",
-                  "if (json.data && json.data.id_log !== undefined && json.data && json.data.id_log !== null) pm.collectionVariables.set('id_log', json.data && json.data.id_log);"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Listar logs",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/logs?limit=20&offset=0",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "logs"
-              ],
-              "query": [
-                {
-                  "key": "limit",
-                  "value": "20"
-                },
-                {
-                  "key": "offset",
-                  "value": "0"
-                }
-              ]
-            }
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
-                  "const json = pm.response.json();",
-                  "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Obtener log",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/logs/{{id_log}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "logs",
-                "{{id_log}}"
-              ]
-            }
-          },
-          "response": [],
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('Status 200', function () { pm.response.to.have.status(200); });",
-                  "const json = pm.response.json();",
-                  "pm.test('success true', function () { pm.expect(json.success === true || json.ok === true).to.eql(true); });"
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "name": "Actualizar log",
-          "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/logs/{{id_log}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "logs",
-                "{{id_log}}"
-              ]
-            },
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"accion\": \"POSTMAN_TEST_UPDATED\"\n}"
             }
           },
           "response": [],
@@ -2398,6 +2114,26 @@
     {
       "key": "id_seguimiento",
       "value": ""
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "creatorEmail",
+      "value": "creador.demo.1779543831@onlyflans.com"
+    },
+    {
+      "key": "followerEmail",
+      "value": "seguidor.demo.1779543831@onlyflans.com"
+    },
+    {
+      "key": "password",
+      "value": "Password123"
     }
   ]
 }
