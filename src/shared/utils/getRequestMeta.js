@@ -6,7 +6,7 @@ function getRequestMeta(req = {}) {
     method: req.method,
     path: req.originalUrl || req.url,
     userAgent: req.headers?.["user-agent"],
-    userId: req.user?.id_persona || req.user?.id_usuario || req.user?.id || req.user?.user_id,
+    userId: req.user?.id_usuario || req.user?.idUsuario || req.user?.id || req.user?.user_id || null,
   };
 }
 

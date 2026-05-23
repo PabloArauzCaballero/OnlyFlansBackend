@@ -24,6 +24,8 @@ function isPlainObject(value) {
 }
 
 function cleanObject(value = {}, options = {}) {
+  if (!isPlainObject(value)) return {};
+
   const stripProtected = options.stripProtected !== false;
 
   return Object.entries(value).reduce((acc, [key, fieldValue]) => {
@@ -34,10 +36,6 @@ function cleanObject(value = {}, options = {}) {
   }, {});
 }
 
-function hasValues(payload = {}) {
-  return Object.keys(payload).length > 0;
-}
-
 function normalizeIdOrParams(idOrParams) {
   if (isPlainObject(idOrParams)) {
     return cleanObject(idOrParams, { stripProtected: false });
@@ -46,28 +44,15 @@ function normalizeIdOrParams(idOrParams) {
   return idOrParams;
 }
 
-function hasMissingIdentifier(idOrParams) {
-  if (idOrParams === undefined || idOrParams === null || idOrParams === "") {
-    return true;
-  }
-
-  if (!isPlainObject(idOrParams)) {
-    return false;
-  }
-
-  const values = Object.values(idOrParams);
-  return values.length === 0 || values.some((value) => value === undefined || value === null || value === "");
-}
-
-async function runHook(hook, args) {
+async function runHook(hook, args, fallbackData) {
   if (typeof hook !== "function") {
-    return { success: true, data: args.payload };
+    return { success: true, data: fallbackData };
   }
 
   const result = await hook(args);
 
   if (!result) {
-    return { success: true, data: args.payload };
+    return { success: true, data: fallbackData };
   }
 
   return result;
@@ -81,21 +66,62 @@ function internalErrorResult(message) {
   };
 }
 
-function validationErrorResult(message, errors = null) {
-  return {
-    success: false,
-    statusCode: 400,
-    message,
-    errors,
-  };
-}
-
 function notFoundResult(entityName) {
   return {
     success: false,
     statusCode: 404,
     message: `No se encontró el registro de ${entityName}.`,
   };
+}
+
+function databaseErrorResult(error) {
+  const name = error?.name || "";
+  const message = error?.message || "";
+
+  if (name === "SequelizeUniqueConstraintError") {
+    return {
+      success: false,
+      statusCode: 409,
+      message: "Ya existe un registro con valores únicos repetidos.",
+      errors: error.errors?.map((item) => ({
+        field: item.path,
+        message: item.message,
+        value: item.value,
+      })) || null,
+    };
+  }
+
+  if (name === "SequelizeForeignKeyConstraintError") {
+    return {
+      success: false,
+      statusCode: 409,
+      message: "No se pudo completar la operación porque una referencia relacionada no existe o está siendo usada.",
+      errors: {
+        table: error.table || null,
+        fields: error.fields || null,
+        constraint: error.index || error.constraint || null,
+      },
+    };
+  }
+
+  if (name === "SequelizeValidationError" || name === "SequelizeDatabaseError") {
+    const isCheckConstraint = message.includes("violates check constraint");
+    const isNotNull = message.includes("not-null") || message.includes("null value in column");
+
+    if (isCheckConstraint || isNotNull || name === "SequelizeValidationError") {
+      return {
+        success: false,
+        statusCode: 400,
+        message: "La base de datos rechazó la operación por una restricción de integridad.",
+        errors: {
+          name,
+          databaseMessage: message,
+        },
+      };
+    }
+  }
+
+  return null;
 }
 
 function createCrudService({
@@ -120,21 +146,13 @@ function createCrudService({
     const moduleName = `${serviceName || entityName}.create`;
 
     try {
-      if (!isPlainObject(payload)) {
-        return validationErrorResult("El payload de creación debe ser un objeto válido.");
-      }
-
       let cleanPayload = cleanObject(payload);
-
-      if (!hasValues(cleanPayload)) {
-        return validationErrorResult("No existen campos válidos para crear el registro.");
-      }
 
       const hookResult = await runHook(hooks.beforeCreate, {
         payload: cleanPayload,
         Repository,
         entityName,
-      });
+      }, cleanPayload);
 
       if (!hookResult.success) {
         return hookResult;
@@ -143,11 +161,6 @@ function createCrudService({
       cleanPayload = hookResult.data || cleanPayload;
 
       const result = await Repository.create(cleanPayload);
-
-      if (!result) {
-        return internalErrorResult("Sin respuesta desde repository al crear el registro.");
-      }
-
       const plainResult = toPlain(result);
 
       const afterHook = await runHook(hooks.afterCreate, {
@@ -155,7 +168,7 @@ function createCrudService({
         result: plainResult,
         Repository,
         entityName,
-      });
+      }, plainResult);
 
       if (!afterHook.success) {
         return afterHook;
@@ -167,6 +180,13 @@ function createCrudService({
         data: afterHook.data || plainResult,
       };
     } catch (error) {
+      const handledError = databaseErrorResult(error);
+
+      if (handledError) {
+        logger.warn({ event: eventName, error: handledError }, "Operación rechazada por la base de datos");
+        return handledError;
+      }
+
       sendServerInternalError(null, logger, eventName, startedAt, moduleName, error);
       return internalErrorResult("Error interno en el servicio al crear el registro.");
     }
@@ -179,20 +199,7 @@ function createCrudService({
 
     try {
       const normalizedId = normalizeIdOrParams(idOrParams);
-
-      if (hasMissingIdentifier(normalizedId)) {
-        return validationErrorResult("El identificador del registro es obligatorio.");
-      }
-
-      if (!isPlainObject(payload)) {
-        return validationErrorResult("El payload de actualización debe ser un objeto válido.");
-      }
-
       let cleanPayload = cleanObject(payload);
-
-      if (!hasValues(cleanPayload)) {
-        return validationErrorResult("No existen campos válidos para actualizar el registro.");
-      }
 
       const currentRecord = await Repository.get(normalizedId);
 
@@ -206,7 +213,7 @@ function createCrudService({
         currentRecord: toPlain(currentRecord),
         Repository,
         entityName,
-      });
+      }, cleanPayload);
 
       if (!hookResult.success) {
         return hookResult;
@@ -229,7 +236,7 @@ function createCrudService({
         result: plainResult,
         Repository,
         entityName,
-      });
+      }, plainResult);
 
       if (!afterHook.success) {
         return afterHook;
@@ -241,6 +248,13 @@ function createCrudService({
         data: afterHook.data || plainResult,
       };
     } catch (error) {
+      const handledError = databaseErrorResult(error);
+
+      if (handledError) {
+        logger.warn({ event: eventName, error: handledError }, "Operación rechazada por la base de datos");
+        return handledError;
+      }
+
       sendServerInternalError(null, logger, eventName, startedAt, moduleName, error);
       return internalErrorResult("Error interno en el servicio al actualizar el registro.");
     }
@@ -254,21 +268,18 @@ function createCrudService({
     try {
       const normalizedId = normalizeIdOrParams(idOrParams);
 
-      if (hasMissingIdentifier(normalizedId)) {
-        return validationErrorResult("El identificador del registro es obligatorio.");
-      }
-
       const hookResult = await runHook(hooks.beforeGet, {
         idOrParams: normalizedId,
         Repository,
         entityName,
-      });
+      }, normalizedId);
 
       if (!hookResult.success) {
         return hookResult;
       }
 
-      const result = await Repository.get(normalizedId);
+      const finalId = hookResult.data || normalizedId;
+      const result = await Repository.get(finalId);
 
       if (!result) {
         return notFoundResult(entityName);
@@ -291,15 +302,13 @@ function createCrudService({
     const moduleName = `${serviceName || entityName}.list`;
 
     try {
-      const cleanQuery = isPlainObject(query)
-        ? cleanObject(query, { stripProtected: false })
-        : {};
+      const cleanQuery = cleanObject(query, { stripProtected: false });
 
       const hookResult = await runHook(hooks.beforeList, {
         query: cleanQuery,
         Repository,
         entityName,
-      });
+      }, cleanQuery);
 
       if (!hookResult.success) {
         return hookResult;
@@ -307,11 +316,6 @@ function createCrudService({
 
       const finalQuery = hookResult.data || cleanQuery;
       const result = await Repository.list(finalQuery);
-
-      if (!result) {
-        return internalErrorResult("Sin respuesta desde repository al listar registros.");
-      }
-
       const plainResult = toPlain(result);
 
       return {

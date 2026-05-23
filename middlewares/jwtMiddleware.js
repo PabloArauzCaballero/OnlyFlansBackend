@@ -22,12 +22,11 @@ function requireAuth(req, res, next) {
     const decoded = verifyAccessToken(token);
 
     req.user = {
-      id_persona: decoded.id_persona || decoded.sub || null,
-      id_usuario: decoded.id_usuario || null,
-      nombre_usuario: decoded.nombre_usuario || decoded.email || null,
+      id_usuario: decoded.id_usuario || decoded.sub || null,
+      nombre: decoded.nombre || decoded.nombre_usuario || null,
       email: decoded.email || null,
-      tipo_usuario: decoded.tipo_usuario || decoded.role || "user",
-      role: decoded.role || decoded.tipo_usuario || "user",
+      rol: decoded.rol || decoded.role || decoded.tipo_usuario || "user",
+      role: decoded.role || decoded.rol || decoded.tipo_usuario || "user",
       tokenUse: decoded.tokenUse,
     };
 

@@ -1,16 +1,26 @@
 const jwt = require("jsonwebtoken");
 
+function normalizeUserForToken(user = {}) {
+  const idUsuario = user.id_usuario || user.idUsuario || user.id || user.sub || null;
+
+  return {
+    sub: idUsuario,
+    id_usuario: idUsuario,
+    nombre: user.nombre || user.nombre_usuario || null,
+    email: user.email || null,
+    rol: user.rol || user.role || user.tipo_usuario || "user",
+  };
+}
+
 function generateAccessToken(user) {
   return jwt.sign(
     {
-      sub: user.id_persona,
-      nombre_usuario: user.nombre_usuario,
-      tipo_usuario: user.tipo_usuario || "user",
+      ...normalizeUserForToken(user),
       tokenUse: "access",
     },
     process.env.JWT_ACCESS_SECRET,
     {
-      expiresIn: "15m",
+      expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || "15m",
     }
   );
 }
@@ -18,28 +28,27 @@ function generateAccessToken(user) {
 function generateRefreshToken(user) {
   return jwt.sign(
     {
-      sub: user.id_persona,
-      nombre_usuario: user.nombre_usuario,
-      tipo_usuario: user.tipo_usuario || "user",
+      ...normalizeUserForToken(user),
       tokenUse: "refresh",
     },
     process.env.JWT_REFRESH_SECRET,
     {
-      expiresIn: "7d",
+      expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d",
     }
   );
 }
 
-function generateSessionToken(sesion){
+function generateSessionToken(sesion) {
   return jwt.sign(
     {
       sub: sesion,
+      tokenUse: "session",
     },
     process.env.SESSION_TOKEN,
     {
-      expiresIn: "8h",
+      expiresIn: process.env.SESSION_TOKEN_EXPIRES_IN || "8h",
     }
-  )
+  );
 }
 
 function verifyAccessToken(token) {

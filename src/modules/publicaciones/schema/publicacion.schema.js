@@ -1,6 +1,7 @@
 const { z } = require("zod");
 const {
   idBigIntSchema,
+  requiredText,
   optionalNonEmptyText,
   requiredUrlOrText,
   positiveIntSchema,
@@ -11,7 +12,13 @@ const {
   requireAtLeastOneField,
 } = require("../../../shared/validation/common.schema");
 
-const publicacionBaseSchema = z.object({
+const publicacionTextOnlyBaseSchema = z.object({
+  id_creador: idBigIntSchema,
+  texto: requiredText(),
+  fecha_publicacion: dateTimeSchema.optional(),
+});
+
+const publicacionWithImagesBaseSchema = z.object({
   id_creador: idBigIntSchema,
   texto: optionalNonEmptyText(),
   fecha_publicacion: dateTimeSchema.optional(),
@@ -22,9 +29,12 @@ const publicacionImagenInputSchema = z.object({
   orden: positiveIntSchema.optional(),
 });
 
-const createPublicacionSchema = publicacionBaseSchema.merge(auditCreateOptionalSchema);
+// POST /api/publicaciones
+// Este endpoint queda para publicaciones solo-texto.
+// Para imágenes se debe usar POST /api/publicaciones/con-imagenes.
+const createPublicacionSchema = publicacionTextOnlyBaseSchema.merge(auditCreateOptionalSchema);
 
-const createPublicacionWithImagesSchema = publicacionBaseSchema
+const createPublicacionWithImagesSchema = publicacionWithImagesBaseSchema
   .extend({
     imagenes: z
       .array(publicacionImagenInputSchema)
@@ -50,7 +60,7 @@ const createPublicacionWithImagesSchema = publicacionBaseSchema
   });
 
 const updatePublicacionSchema = requireAtLeastOneField(
-  publicacionBaseSchema.partial().merge(auditUpdateOptionalSchema)
+  publicacionWithImagesBaseSchema.partial().merge(auditUpdateOptionalSchema)
 );
 
 const publicacionIdParamSchema = z.object({

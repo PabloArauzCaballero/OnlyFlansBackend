@@ -1,14 +1,12 @@
 function getAuthUserId(req = {}) {
-/*  return (
-    req.user?.id_persona ||
+  return (
     req.user?.id_usuario ||
+    req.user?.idUsuario ||
     req.user?.id ||
     req.user?.user_id ||
-    req.id_persona ||
+    req.id_usuario ||
     null
   );
-*/
-  return 18;
 }
 
 module.exports = getAuthUserId;

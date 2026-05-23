@@ -9,6 +9,13 @@ function toPlain(value) {
   return value;
 }
 
+function removeUndefinedFields(payload = {}) {
+  return Object.entries(payload).reduce((acc, [key, value]) => {
+    if (value !== undefined) acc[key] = value;
+    return acc;
+  }, {});
+}
+
 const baseRepository = createCrudRepository({
   Model: Publicacion,
   entity: "publicacion",
@@ -17,13 +24,14 @@ const baseRepository = createCrudRepository({
 
 async function createWithImages({ publicacion, imagenes }) {
   return sequelize.transaction(async (transaction) => {
-    const createdPublicacion = await Publicacion.create(publicacion, { transaction });
+    const createdPublicacion = await Publicacion.create(removeUndefinedFields(publicacion), { transaction });
     const plainPublicacion = toPlain(createdPublicacion);
 
-    const imagesPayload = imagenes.map((imagen, index) => ({
+    const imagesPayload = imagenes.map((imagen, index) => removeUndefinedFields({
       id_publicacion: plainPublicacion.id_publicacion,
       link_imagen: imagen.link_imagen,
-      orden: imagen.orden || index + 1,
+      orden: imagen.orden ?? index + 1,
+      estado_registro: imagen.estado_registro,
     }));
 
     const createdImages = await PublicacionImagen.bulkCreate(imagesPayload, {
