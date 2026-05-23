@@ -1,0 +1,9 @@
+{
+  "name": "onlyflansapi",
+  "version": "1.0.0",
+  "description": "OnflyFlans API server",
+  "main": "index.js",
+  "repository": "https://github.com/PabloArauzCaballero/OnlyFlansBackend",
+  "author": "Pablo Arauz, Marco",
+  "license": "MIT"
+}
