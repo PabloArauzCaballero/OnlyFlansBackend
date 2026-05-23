@@ -21,11 +21,9 @@ function sendServiceResponse(req, res, loggerEventName, startedAt, result, succe
 
 // Reglas de negocio específicas de publicacion:
 // - Validación de creador requerido
-// - Validación de creador requerido
 // - Validación de texto opcional no vacío
 // - Límite de 5000 caracteres para texto
-// - Las imágenes se gestionan en publicacion_imagen
-// - TODO: implementar flujo transaccional para crear publicación con imágenes
+// - Creación transaccional de publicación con imágenes mediante POST /con-imagenes
 async function create(req, res) {
   const startedAt = Date.now();
   const eventName = "publicacion_create";
@@ -40,6 +38,24 @@ async function create(req, res) {
     return res.status(500).json({
       success: false,
       message: "Error interno al crear el registro.",
+    });
+  }
+}
+
+async function createWithImages(req, res) {
+  const startedAt = Date.now();
+  const eventName = "publicacion_create_with_images";
+
+  try {
+    sendAttemptingRequest(req, logger, eventName, { body: req.body });
+    const result = await PublicacionService.createWithImages(req.body);
+    return sendServiceResponse(req, res, eventName, startedAt, result, 201);
+  } catch (error) {
+    sendServerInternalError(req, logger, eventName, startedAt, "publicacion.controller.createWithImages", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Error interno al crear la publicación con imágenes.",
     });
   }
 }
@@ -100,6 +116,7 @@ async function list(req, res) {
 
 module.exports = {
   create,
+  createWithImages,
   update,
   get,
   list,

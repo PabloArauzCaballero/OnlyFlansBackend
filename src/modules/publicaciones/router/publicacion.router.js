@@ -12,10 +12,17 @@ const {
 
 const {
   createSchema,
+  createWithImagesSchema,
   updateSchema,
   idSchema,
   querySchema,
 } = require("../schema/publicacion.schema");
+
+router.post(
+  "/con-imagenes",
+  validateBody(createWithImagesSchema, logger, "publicacion_create_with_images"),
+  PublicacionController.createWithImages
+);
 
 router.post(
   "/",
