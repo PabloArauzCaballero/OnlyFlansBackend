@@ -16,7 +16,6 @@ Esta carpeta contiene infraestructura base del backend. Aquí no deberían vivir
 
 - ¿Cómo conecto a la base de datos?
 - ¿Cómo genero/verifico JWT?
-- ¿Cómo conecto Redis?
 - ¿Dónde se declaran asociaciones Sequelize?
 
 No debe responder preguntas de negocio como:
