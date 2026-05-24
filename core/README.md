@@ -8,7 +8,6 @@ Esta carpeta contiene infraestructura base del backend. Aquí no deberían vivir
 |---|---|---|
 | `db/` | Configuración Sequelize y asociaciones entre modelos. | `server.js`, repositories y modelos. |
 | `jwt/` | Generación y verificación de tokens JWT. | Auth service y `jwtMiddleware`. |
-| `redis/` | Conexión opcional a Redis. | `server.js` y helpers de cache. |
 | `sha2/` | Helper simple de hash SHA-256. | Código que necesite hashing no relacionado con password. |
 
 ## Responsabilidad
