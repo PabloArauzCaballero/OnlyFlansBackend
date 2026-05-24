@@ -1,132 +1,479 @@
 # OnlyFlans Backend
 
-Backend REST construido con **Node.js + Express + Sequelize + PostgreSQL/Neon + Zod + Pino**.
+Backend REST para una plataforma de creadores, seguidores, publicaciones, apoyos y autenticación. Está construido con **Node.js**, **Express**, **Sequelize**, **PostgreSQL/Neon**, **Zod**, **Pino**, **JWT**, **cookies HTTP-only**, **Redis opcional** y **Yarn** como gestor de dependencias.
 
-Este proyecto está organizado por módulos funcionales. Cada módulo agrupa sus entidades en carpetas de `router`, `controller`, `service`, `repository`, `model` y `schema` para mantener separado el flujo HTTP, la validación, la lógica de caso de uso, el acceso a datos y la definición ORM.
+Este README está ajustado al estado real del código del proyecto. La documentación anterior mezclaba rutas internas con rutas HTTP públicas. En esta versión queda claro qué endpoints existen, qué carpetas participan en cada flujo, qué recibe cada capa y por qué está organizada así.
 
 ---
 
-## 1. Resumen de arquitectura
+## 1. Requisitos para levantar el backend
 
-La arquitectura sigue una estructura por capas:
+Necesitas tener instalado:
+
+| Herramienta | Uso |
+|---|---|
+| Node.js | Ejecutar el servidor Express. |
+| Yarn | Instalar dependencias y ejecutar scripts. Este proyecto usa `yarn.lock`. |
+| PostgreSQL o Neon | Base de datos principal. |
+| Redis | Opcional. Solo se conecta si `REDIS_ENABLED=true`. |
+| Postman/Bruno | Opcional, para probar endpoints. Hay una colección Postman en `docs/TEST`. |
+
+> Importante: no uses `npm install` en este proyecto si vas a mantener Yarn como estándar. Mezclar `package-lock.json` con `yarn.lock` suele generar instalaciones inconsistentes, especialmente en deploys.
+
+---
+
+## 2. Instalación con Yarn
+
+Desde la raíz del backend:
+
+```bash
+yarn install --frozen-lockfile
+```
+
+Si estás en desarrollo local y todavía no existe el archivo `.env`:
+
+```bash
+cp .env.example .env
+```
+
+En Windows PowerShell puedes usar:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Luego ajusta las variables de conexión a PostgreSQL/Neon, JWT, cookies, CORS y Redis.
+
+Levantar en desarrollo:
+
+```bash
+yarn dev
+```
+
+Levantar en modo normal:
+
+```bash
+yarn start
+```
+
+Revisar sintaxis del entrypoint:
+
+```bash
+yarn check
+```
+
+Probar que el servidor responde:
+
+```http
+GET http://localhost:3000/health
+```
+
+Respuesta esperada:
+
+```json
+{
+  "ok": true,
+  "message": "Servidor funcionando correctamente"
+}
+```
+
+---
+
+## 3. Scripts disponibles
+
+Los scripts se encuentran en `package.json`.
+
+| Script | Comando | Qué hace |
+|---|---|---|
+| `start` | `yarn start` | Ejecuta `node server.js`. Se usa para producción o ejecución directa. |
+| `dev` | `yarn dev` | Ejecuta `nodemon server.js`. Reinicia el servidor al detectar cambios. |
+| `check` | `yarn check` | Ejecuta `node --check server.js` para validar sintaxis básica del entrypoint. |
+
+---
+
+## 4. Variables de entorno principales
+
+La plantilla está en `.env.example`. El archivo real `.env` no debe subirse al repositorio.
+
+| Variable | Uso |
+|---|---|
+| `NODE_ENV` | Define entorno: `development`, `production`, etc. |
+| `PORT` | Puerto donde escucha Express. Por defecto `3000`. |
+| `LOG_LEVEL` | Nivel de logs de Pino: `info`, `debug`, `warn`, `error`, etc. |
+| `LOG_FILE` | Destino del log. Por defecto `./logs/app.log`. |
+| `CORS_ORIGINS` | Orígenes permitidos separados por coma. Ejemplo: `http://localhost:5173,http://localhost:3000`. |
+| `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` | Conexión PostgreSQL/Neon. |
+| `PGSSLMODE` | En Neon normalmente `require`. Localmente puede ser `disable`. |
+| `PGCHANNELBINDING` | En Neon puede ser `require`; localmente puede ser `disable`. |
+| `DB_LOGGING` | Si es `true`, registra consultas SQL de Sequelize. |
+| `JWT_ACCESS_SECRET` | Secreto para JWT de acceso. Debe ser largo y privado. |
+| `JWT_REFRESH_SECRET` | Secreto para JWT de refresh. Debe ser diferente al access secret. |
+| `SESSION_TOKEN` | Secreto para tokens de sesión si se usan. |
+| `JWT_ACCESS_EXPIRES_IN` | Duración del access token. Ejemplo: `15m`. |
+| `JWT_REFRESH_EXPIRES_IN` | Duración del refresh token. Ejemplo: `7d`. |
+| `COOKIE_NAME` | Nombre de la cookie de access token. Por defecto `access_token`. |
+| `REFRESH_COOKIE_NAME` | Nombre de la cookie refresh. Por defecto `refresh_token`. |
+| `COOKIE_MAX_AGE_MS` | Duración de cookie access en milisegundos. |
+| `REFRESH_COOKIE_MAX_AGE_MS` | Duración de cookie refresh en milisegundos. |
+| `COOKIE_SECURE` | Si es `true`, cookies solo sobre HTTPS. En producción debe ser `true`. |
+| `COOKIE_SAME_SITE` | Política SameSite. Por defecto `lax`. |
+| `REDIS_ENABLED` | Si es `true`, intenta conectar Redis al arrancar. |
+| `REDIS_URL` | URL de conexión Redis. |
+
+---
+
+## 5. Flujo general de arranque
 
 ```txt
-Request HTTP
+server.js
+  ↓
+carga variables de entorno con dotenv
+  ↓
+importa app.js
+  ↓
+connectDatabase() desde core/db/db.config.js
+  ↓
+connectRedis() desde core/redis/redis.config.js si REDIS_ENABLED=true
+  ↓
+app.listen(PORT)
+  ↓
+registra señales SIGTERM y SIGINT para cerrar recursos
+```
+
+`server.js` no define rutas. Su responsabilidad es levantar la aplicación, conectar infraestructura y apagar correctamente.
+
+---
+
+## 6. Flujo general de una petición HTTP
+
+```txt
+Cliente / Frontend / Postman
   ↓
 app.js
   ↓
-Middlewares globales
+pino-http: crea logger por request y request id
+  ↓
+helmet: headers básicos de seguridad
+  ↓
+compression: comprime respuestas grandes
+  ↓
+cors: valida origen permitido
+  ↓
+rateLimit: limita abuso global, excepto /api/auth
+  ↓
+cookieParser: lee cookies HTTP
+  ↓
+express.json / express.urlencoded: parsea body
+  ↓
+/health si aplica
+  ↓
+REQUEST HIT log
+  ↓
+actionLog.middleware: prepara y persiste logs al finalizar response
   ↓
 src/modules/index.js
   ↓
-Módulo específico: usuarios, auth, apoyos, publicaciones
+módulo correspondiente: auth, usuarios, apoyos o publicaciones
   ↓
 router/*.router.js
   ↓
-middlewares/validate.middleware.js usando schemas Zod
+validateBody / validateParams / validateQuery con Zod
   ↓
 controller/*.controller.js
   ↓
 service/*.service.js
   ↓
-src/shared/service/createCrudService.js
-  ↓
 repository/*.repository.js
-  ↓
-src/shared/repository/createCrudRepository.js
   ↓
 model/*.model.js Sequelize
   ↓
 PostgreSQL / Neon
 ```
 
-La idea central es que cada capa tenga una responsabilidad clara:
-
-| Capa | Responsabilidad |
-|---|---|
-| `app.js` | Configura Express, middlewares globales, CORS, Helmet, compresión, rate limit y monta los módulos. |
-| `router` | Declara las rutas HTTP y conecta validaciones Zod antes del controller. |
-| `schema` | Define qué espera cada endpoint en `body`, `params` y `query`. Aquí vive la validación de entrada. |
-| `controller` | Recibe la petición validada, llama al service, registra logs y arma la respuesta HTTP. |
-| `service` | Coordina casos de uso. No repite validaciones del middleware. Puede coordinar transacciones o reglas de negocio reales. |
-| `createCrudService` | Service global reutilizable para operaciones CRUD estándar. Maneja respuestas uniformes, errores de DB y not found. |
-| `repository` | Acceso directo a datos. Llama a Sequelize y no contiene lógica HTTP. |
-| `createCrudRepository` | Repository global reutilizable para `create`, `get`, `list` y `update`. |
-| `model` | Define los modelos Sequelize según el DDL real. |
-| `core/db/db.associations.js` | Centraliza modelos y asociaciones Sequelize. |
+La validación del request se hace antes del controller. Por eso el service no debe repetir validaciones de forma como email inválido, ID positivo, campo requerido o body vacío en update. El service se reserva para coordinación, reglas de negocio y transacciones.
 
 ---
 
-## 2. Flujo completo de una acción
+## 7. Arquitectura por capas
 
-Ejemplo: crear una publicación con imágenes.
+| Capa | Carpeta/archivo | Recibe | Devuelve | Por qué existe |
+|---|---|---|---|---|
+| Entry point | `server.js` | Variables de entorno y aplicación Express | Servidor HTTP escuchando | Separar arranque de configuración HTTP. |
+| App Express | `app.js` | Request HTTP | Routing, 404 o error global | Centralizar middlewares globales. |
+| Module loader | `src/modules/index.js` | Configuración de módulos | Lista de módulos montables | Evitar montar rutas manualmente una por una en `app.js`. |
+| Module index | `src/modules/*/index.js` | Routers internos | `{ moduleName, basePath, router }` | Declarar base path y subrutas del módulo. |
+| Router | `router/*.router.js` | Request sin validar | Request validado hacia controller | Definir endpoint, método HTTP y validadores. |
+| Schema | `schema/*.schema.js` | `body`, `params`, `query` | Datos parseados y normalizados | Validar entrada con Zod antes de tocar negocio o DB. |
+| Controller | `controller/*.controller.js` | `req`, `res` ya validados | JSON HTTP | Traducir HTTP ↔ service y registrar logs. |
+| Service | `service/*.service.js` | Payload limpio o params limpios | Resultado de negocio `{ success, data, message }` | Coordinar casos de uso, errores, hooks y transacciones. |
+| Repository | `repository/*.repository.js` | Datos listos para DB | Registros Sequelize convertidos a objeto plano | Aislar acceso a datos. |
+| Model | `model/*.model.js` | Instancia Sequelize | Modelo ORM | Representar tablas del esquema `onlyflans`. |
+| Shared | `src/shared/*` | Funciones reutilizables | Helpers genéricos | Evitar duplicación entre módulos. |
+| Core | `core/*` | Configuración base | DB, JWT, Redis, hash | Centralizar infraestructura técnica. |
 
-### Endpoint
+---
+
+## 8. Rutas públicas reales del backend
+
+### 8.1 Health
+
+| Método | Ruta | Protegida | Qué hace |
+|---|---|---|---|
+| `GET` | `/health` | No | Verifica que Express está funcionando. |
+
+---
+
+### 8.2 Auth
+
+Base path: `/api/auth`
+
+| Método | Ruta | Protegida | Qué hace |
+|---|---|---|---|
+| `POST` | `/api/auth/registro/creador` | No | Crea usuario con rol `CREADOR` y su `perfil_creador` en una transacción. |
+| `POST` | `/api/auth/registro/seguidor` | No | Crea usuario con rol `SEGUIDOR` y su `perfil_seguidor` en una transacción. |
+| `POST` | `/api/auth/login` | No | Valida credenciales, crea sesión, registra log, genera JWT y setea cookies HTTP-only. |
+| `POST` | `/api/auth/logout` | Sí | Cierra la sesión activa y limpia cookies. |
+| `GET` | `/api/auth/me` | Sí | Devuelve el usuario autenticado y su perfil asociado si existe. |
+
+> Sesiones y logs existen como services, repositories y models internos. Actualmente no tienen router público montado en `src/modules/auth/index.js`. Por eso no se deben documentar como `/api/auth/sesiones` o `/api/auth/logs` mientras no se agreguen rutas.
+
+---
+
+### 8.3 Usuarios
+
+Base path: `/api/usuarios`
+
+| Método | Ruta | Protegida | Qué hace |
+|---|---|---|---|
+| `GET` | `/api/usuarios` | No | Lista usuarios con paginación y filtros. |
+| `GET` | `/api/usuarios/:id_usuario` | No | Obtiene un usuario por ID. |
+| `PUT` | `/api/usuarios/:id_usuario` | No | Actualiza un usuario existente. |
+| `GET` | `/api/usuarios/perfiles-creadores` | No | Lista perfiles de creadores. |
+| `GET` | `/api/usuarios/perfiles-creadores/:id_usuario` | No | Obtiene perfil de creador por `id_usuario`. |
+| `PUT` | `/api/usuarios/perfiles-creadores/:id_usuario` | No | Actualiza perfil de creador. |
+| `GET` | `/api/usuarios/perfiles-seguidores` | No | Lista perfiles de seguidores. |
+| `GET` | `/api/usuarios/perfiles-seguidores/:id_usuario` | No | Obtiene perfil de seguidor por `id_usuario`. |
+| `PUT` | `/api/usuarios/perfiles-seguidores/:id_usuario` | No | Actualiza perfil de seguidor. |
+| `POST` | `/api/usuarios/creadores-favoritos` | No | Marca un creador como favorito para un seguidor. |
+| `PUT` | `/api/usuarios/creadores-favoritos/:id_favorito` | No | Actualiza un favorito. |
+| `GET` | `/api/usuarios/creadores-favoritos/:id_favorito` | No | Obtiene un favorito. |
+| `GET` | `/api/usuarios/creadores-favoritos` | No | Lista favoritos. |
+| `POST` | `/api/usuarios/creadores-seguidos` | No | Registra seguimiento de un seguidor a un creador. |
+| `PUT` | `/api/usuarios/creadores-seguidos/:id_seguimiento` | No | Actualiza un seguimiento. |
+| `GET` | `/api/usuarios/creadores-seguidos/:id_seguimiento` | No | Obtiene un seguimiento. |
+| `GET` | `/api/usuarios/creadores-seguidos` | No | Lista seguimientos. |
+
+> No existe `POST /api/usuarios` en el router actual. Para crear usuarios se debe usar `/api/auth/registro/creador` o `/api/auth/registro/seguidor`, porque el diseño exige crear usuario junto con su perfil correspondiente.
+
+---
+
+### 8.4 Apoyos
+
+Base path: `/api/apoyos`
+
+| Método | Ruta | Protegida | Qué hace |
+|---|---|---|---|
+| `POST` | `/api/apoyos/tipos` | No | Crea un tipo de apoyo. |
+| `PUT` | `/api/apoyos/tipos/:id_tipo_apoyo` | No | Actualiza un tipo de apoyo. |
+| `GET` | `/api/apoyos/tipos/:id_tipo_apoyo` | No | Obtiene un tipo de apoyo. |
+| `GET` | `/api/apoyos/tipos` | No | Lista tipos de apoyo. |
+| `POST` | `/api/apoyos/metas` | No | Crea una meta de apoyo para un creador. |
+| `PUT` | `/api/apoyos/metas/:id_meta` | No | Actualiza una meta. |
+| `GET` | `/api/apoyos/metas/:id_meta` | No | Obtiene una meta. |
+| `GET` | `/api/apoyos/metas` | No | Lista metas. |
+| `POST` | `/api/apoyos` | No | Crea un apoyo realizado por un seguidor a un creador. |
+| `PUT` | `/api/apoyos/:id_apoyo` | No | Actualiza un apoyo. |
+| `GET` | `/api/apoyos/:id_apoyo` | No | Obtiene un apoyo. |
+| `GET` | `/api/apoyos` | No | Lista apoyos. |
+
+---
+
+### 8.5 Publicaciones
+
+Base path: `/api/publicaciones`
+
+| Método | Ruta | Protegida | Qué hace |
+|---|---|---|---|
+| `POST` | `/api/publicaciones` | No | Crea una publicación solo texto. |
+| `POST` | `/api/publicaciones/con-imagenes` | No | Crea publicación e imágenes en una transacción. |
+| `PUT` | `/api/publicaciones/:id_publicacion` | No | Actualiza una publicación. |
+| `GET` | `/api/publicaciones/:id_publicacion` | No | Obtiene una publicación. |
+| `GET` | `/api/publicaciones` | No | Lista publicaciones. |
+| `POST` | `/api/publicaciones/imagenes` | No | Crea una imagen asociada a una publicación existente. |
+| `PUT` | `/api/publicaciones/imagenes/:id_publicacion_imagen` | No | Actualiza una imagen. |
+| `GET` | `/api/publicaciones/imagenes/:id_publicacion_imagen` | No | Obtiene una imagen. |
+| `GET` | `/api/publicaciones/imagenes` | No | Lista imágenes. |
+| `POST` | `/api/publicaciones/comentarios` | No | Crea un comentario. |
+| `PUT` | `/api/publicaciones/comentarios/:id_comentario` | No | Actualiza un comentario. |
+| `GET` | `/api/publicaciones/comentarios/:id_comentario` | No | Obtiene un comentario. |
+| `GET` | `/api/publicaciones/comentarios` | No | Lista comentarios. |
+
+---
+
+## 9. Flujo de autenticación
+
+### 9.1 Registro de creador
 
 ```http
-POST /api/publicaciones/con-imagenes
+POST /api/auth/registro/creador
 ```
 
-### Flujo interno
+Body esperado:
 
-```txt
-Cliente/Postman/Frontend
-  ↓
-POST /api/publicaciones/con-imagenes
-  ↓
-app.js
-  - pinoHttp asigna logger de request
-  - helmet aplica headers de seguridad
-  - compression comprime si corresponde
-  - cors valida origen
-  - rateLimit controla abuso
-  - cookieParser lee cookies
-  - express.json parsea JSON
-  - actionLogMiddleware prepara metadatos de auditoría en req.actionLog
-  ↓
-src/modules/index.js
-  ↓
-src/modules/publicaciones/index.js
-  ↓
-src/modules/publicaciones/router/publicacion.router.js
-  ↓
-validateBody(createWithImagesSchema)
-  - valida id_creador
-  - valida texto opcional no vacío
-  - valida array imagenes con al menos una imagen
-  - valida link_imagen y orden
-  - valida que no se repita orden si viene explícito
-  ↓
-PublicacionController.createWithImages
-  - registra intento con sendAttemptingRequest
-  - llama a PublicacionService.createWithImages(req.body)
-  ↓
-PublicacionService.createWithImages
-  - NO repite validaciones de Zod
-  - prepara payload de publicacion
-  - prepara payload de imagenes
-  - llama a PublicacionRepository.createWithImages
-  ↓
-PublicacionRepository.createWithImages
-  - abre sequelize.transaction
-  - crea registro en onlyflans.publicacion
-  - crea registros relacionados en onlyflans.publicacion_imagen
-  - si falla algo, rollback automático
-  ↓
-Sequelize models
-  ↓
-PostgreSQL / Neon
-  ↓
-Respuesta vuelve al controller
-  ↓
-Controller responde JSON con status 201
+```json
+{
+  "usuario": {
+    "nombre": "Creador Demo",
+    "email": "creador@test.com",
+    "password": "Password123",
+    "url_imagen_portada": "https://example.com/portada.jpg",
+    "imagen_perfil": "https://example.com/perfil.jpg"
+  },
+  "perfil_creador": {
+    "nombre_publico": "Creador Demo",
+    "biografia": "Descripción pública",
+    "foto_perfil_url": "https://example.com/foto.jpg",
+    "banner_url": "https://example.com/banner.jpg"
+  }
+}
 ```
+
+Qué ocurre internamente:
+
+1. `auth.router.js` valida el body con `registrarCreadorSchema`.
+2. `auth.controller.js` oculta la contraseña en logs.
+3. `auth.service.js` hashea la contraseña y fuerza `rol: "CREADOR"`.
+4. `auth.repository.js` abre una transacción.
+5. Se crea `usuario`.
+6. Se crea `perfil_creador` usando el `id_usuario` recién creado.
+7. Se registra acción `REGISTRO_CREADOR` en `logs`.
+8. Se devuelve el usuario sin `password_hash`.
 
 ---
 
-## 3. Decisión importante sobre validaciones
+### 9.2 Registro de seguidor
 
-Las validaciones de forma del request se hacen en **Zod**, dentro de los archivos `schema/*.schema.js`, y se ejecutan desde los routers con:
+```http
+POST /api/auth/registro/seguidor
+```
+
+Body esperado:
+
+```json
+{
+  "usuario": {
+    "nombre": "Seguidor Demo",
+    "email": "seguidor@test.com",
+    "password": "Password123",
+    "url_imagen_portada": "https://example.com/portada.jpg",
+    "imagen_perfil": "https://example.com/perfil.jpg"
+  },
+  "perfil_seguidor": {
+    "nombre_visible": "Seguidor Demo"
+  }
+}
+```
+
+La lógica es equivalente al registro de creador, pero fuerza `rol: "SEGUIDOR"` y crea `perfil_seguidor`.
+
+---
+
+### 9.3 Login
+
+```http
+POST /api/auth/login
+```
+
+Body esperado:
+
+```json
+{
+  "email": "creador@test.com",
+  "password": "Password123"
+}
+```
+
+Qué ocurre:
+
+1. Se valida email y password con Zod.
+2. Se busca usuario activo por email.
+3. Se compara la contraseña contra `password_hash`.
+4. Se crea una fila en `sesion_usuario`.
+5. Se actualiza `ultimo_login`.
+6. Se generan `accessToken` y `refreshToken`.
+7. Se guardan cookies HTTP-only.
+8. Se registra acción `LOGIN`.
+
+Respuesta exitosa simplificada:
+
+```json
+{
+  "success": true,
+  "message": "Inicio de sesión correcto.",
+  "data": {
+    "user": {
+      "id_usuario": 1,
+      "nombre": "Creador Demo",
+      "email": "creador@test.com",
+      "rol": "CREADOR"
+    },
+    "session": {
+      "id_sesion": 1,
+      "fecha_inicio": "2026-05-24T00:00:00.000Z"
+    },
+    "accessToken": "jwt...",
+    "refreshToken": "jwt..."
+  }
+}
+```
+
+Aunque el backend devuelve tokens en `data`, también los coloca en cookies HTTP-only. Para un frontend web, lo más seguro es usar cookies con `credentials: 'include'`.
+
+---
+
+### 9.4 Logout
+
+```http
+POST /api/auth/logout
+```
+
+Requiere autenticación mediante cookie `access_token` o header:
+
+```http
+Authorization: Bearer <accessToken>
+```
+
+Qué ocurre:
+
+1. `requireAuth` verifica el JWT.
+2. Valida que exista una sesión activa en `sesion_usuario`.
+3. `AuthService.logout` cierra la sesión.
+4. Se registra acción `LOGOUT`.
+5. Se limpian cookies.
+
+---
+
+### 9.5 Usuario autenticado
+
+```http
+GET /api/auth/me
+```
+
+Requiere autenticación. Devuelve usuario activo con `perfilCreador` o `perfilSeguidor` si corresponde.
+
+---
+
+## 10. Validación con Zod
+
+Los schemas viven en:
+
+```txt
+src/modules/*/schema/*.schema.js
+src/shared/validation/common.schema.js
+src/shared/validation/flows.schema.js
+```
+
+Los routers usan:
 
 ```js
 validateBody(schema, logger, eventName)
@@ -134,173 +481,26 @@ validateParams(schema, logger, eventName)
 validateQuery(schema, logger, eventName)
 ```
 
-Por eso los services fueron corregidos para no repetir validaciones como:
+Cuando la validación falla, la respuesta es:
 
-- campo requerido;
-- formato de email;
-- longitud máxima;
-- valores permitidos por enum/check;
-- campos positivos;
-- payload vacío en update.
+```json
+{
+  "success": false,
+  "message": "Datos inválidos.",
+  "errors": {
+    "formErrors": [],
+    "fieldErrors": {}
+  }
+}
+```
 
-El service debe encargarse de coordinar el caso de uso, no de repetir lo que ya hizo el middleware. Si una regla requiere consultar base de datos, transacciones o cálculos de negocio, sí corresponde al service.
+Para params inválidos se devuelve `Parámetros inválidos.` y para query inválida se devuelve `Query inválida.`.
 
 ---
 
-## 4. Documentos principales del backend
+## 11. Convención de respuestas
 
-### Raíz del proyecto
-
-| Archivo | Función |
-|---|---|
-| `server.js` | Punto de entrada. Carga `.env`, conecta la base de datos y levanta Express. También maneja apagado con `SIGTERM` y `SIGINT`. |
-| `app.js` | Configura la aplicación Express: seguridad, CORS, parsers, logs, rate limit, health check, módulos, 404 y error handler global. |
-| `package.json` | Define nombre del proyecto, scripts y dependencias necesarias. |
-| `.env.example` | Plantilla de variables de entorno para correr local o en Neon. |
-| `.gitignore` | Archivos/carpetas que no deben versionarse. |
-| `README.md` | Documento principal de arquitectura, flujo y uso del backend. |
-
-### `core/`
-
-| Archivo | Función |
-|---|---|
-| `core/db/db.config.js` | Crea la instancia Sequelize usando variables `PGHOST`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`, etc. Expone `connectDatabase`, `closeDatabase` y `sequelize`. |
-| `core/db/db.associations.js` | Importa todos los modelos Sequelize, declara asociaciones `belongsTo`, `hasOne`, `hasMany` y `belongsToMany`, y exporta el objeto `models`. |
-| `core/jwt/jwt.js` | Genera y verifica JWT de acceso, refresh y sesión usando `id_usuario`. |
-| `core/sha2/sha2.js` | Helper de hash SHA-256. |
-
-### `logs/`
-
-| Archivo | Función |
-|---|---|
-| `logs/logger.js` | Configura Pino como logger principal del proyecto. Por defecto escribe en `./logs/app.log`. |
-
-### `middlewares/`
-
-| Archivo | Función |
-|---|---|
-| `middlewares/validate.middleware.js` | Middleware reutilizable para validar `body`, `params` y `query` con Zod. Si falla, responde 400. |
-| `middlewares/jwtMiddleware.js` | Middleware `requireAuth` para validar token JWT desde header Bearer o cookie `access_token`. Carga `req.user` con `id_usuario`. |
-| `middlewares/actionLog.middleware.js` | Prepara metadatos de auditoría en `req.actionLog`. Actualmente no inserta automáticamente en la tabla `logs`; deja los datos disponibles para un flujo posterior. |
-
-### `src/shared/`
-
-| Archivo/carpeta | Función |
-|---|---|
-| `src/shared/service/createCrudService.js` | Service global para CRUD estándar. Maneja respuestas uniformes, not found, errores de constraints y errores internos. |
-| `src/shared/repository/createCrudRepository.js` | Repository global para Sequelize. Implementa `create`, `get`, `list`, `update`, filtros por query, paginación y búsqueda textual. |
-| `src/shared/validation/common.schema.js` | Helpers Zod reutilizables: IDs, textos, enums, fechas, decimales, auditoría y query de listado. |
-| `src/shared/validation/flows.schema.js` | Schemas recomendados para flujos transaccionales que afectan más de una tabla. |
-| `src/shared/utils/*.js` | Helpers de logging, errores, conversión a plain object, metadata de request, comparación segura, etc. |
-
----
-
-## 5. Módulos del backend
-
-### 5.1. `src/modules/usuarios`
-
-Maneja usuarios, perfiles y relaciones seguidor-creador.
-
-Entidades:
-
-- `usuario`
-- `perfil_creador`
-- `perfil_seguidor`
-- `creador_favorito`
-- `creador_seguido`
-
-Base path:
-
-```txt
-/api/usuarios
-```
-
-Subrutas:
-
-```txt
-/api/usuarios
-/api/usuarios/perfiles-creadores
-/api/usuarios/perfiles-seguidores
-/api/usuarios/creadores-favoritos
-/api/usuarios/creadores-seguidos
-```
-
-### 5.2. `src/modules/auth`
-
-Maneja sesiones y logs.
-
-Entidades:
-
-- `sesion_usuario`
-- `logs`
-
-Base path:
-
-```txt
-/api/auth
-```
-
-Subrutas:
-
-```txt
-/api/auth/sesiones
-/api/auth/logs
-```
-
-### 5.3. `src/modules/apoyos`
-
-Maneja tipos de apoyo, metas de apoyo y apoyos realizados.
-
-Entidades:
-
-- `tipo_apoyo`
-- `meta_apoyo`
-- `apoyo`
-
-Base path:
-
-```txt
-/api/apoyos
-```
-
-Subrutas:
-
-```txt
-/api/apoyos
-/api/apoyos/tipos
-/api/apoyos/metas
-```
-
-### 5.4. `src/modules/publicaciones`
-
-Maneja publicaciones, imágenes y comentarios.
-
-Entidades:
-
-- `publicacion`
-- `publicacion_imagen`
-- `comentario_publicacion`
-
-Base path:
-
-```txt
-/api/publicaciones
-```
-
-Subrutas:
-
-```txt
-/api/publicaciones
-/api/publicaciones/con-imagenes
-/api/publicaciones/imagenes
-/api/publicaciones/comentarios
-```
-
----
-
-## 6. Convención de respuestas
-
-### Respuesta exitosa de creación
+### Creación exitosa
 
 ```json
 {
@@ -310,7 +510,27 @@ Subrutas:
 }
 ```
 
-### Respuesta exitosa de listado
+### Actualización exitosa
+
+```json
+{
+  "success": true,
+  "message": "Registro actualizado correctamente.",
+  "data": {}
+}
+```
+
+### Obtención exitosa
+
+```json
+{
+  "success": true,
+  "message": "Registro obtenido correctamente.",
+  "data": {}
+}
+```
+
+### Listado exitoso
 
 ```json
 {
@@ -330,19 +550,6 @@ Subrutas:
 }
 ```
 
-### Error de validación Zod
-
-```json
-{
-  "success": false,
-  "message": "Datos inválidos.",
-  "errors": {
-    "formErrors": [],
-    "fieldErrors": {}
-  }
-}
-```
-
 ### Registro no encontrado
 
 ```json
@@ -353,7 +560,7 @@ Subrutas:
 }
 ```
 
-### Error de constraint de base de datos
+### Error por constraint de base de datos
 
 ```json
 {
@@ -365,674 +572,156 @@ Subrutas:
 
 ---
 
-## 7. Rutas disponibles
+## 12. Query estándar de listados
 
-Todas las rutas de entidades siguen el patrón:
+Los endpoints `GET /recurso` aceptan, según schema:
+
+| Query param | Qué hace |
+|---|---|
+| `limit` | Cantidad máxima de registros. Máximo `100`. Por defecto `20`. |
+| `offset` | Salto de registros para paginación. Por defecto `0`. |
+| `search` | Búsqueda textual sobre campos `STRING`, `TEXT` o `CITEXT` del modelo. |
+| `orderBy` | Campo por el que se ordena si existe en el modelo. |
+| `orderDir` | `ASC` o `DESC`. Por defecto `DESC`. |
+| `estado_registro` | Filtro por `ACTIVO`, `INACTIVO` o `ELIMINADO`. |
+
+Cada schema puede agregar filtros propios, por ejemplo `id_creador`, `id_seguidor`, `rol`, `email`, etc.
+
+---
+
+## 13. Auditoría y logs
+
+El backend tiene dos niveles de logging:
+
+1. **Logs técnicos con Pino**: se escriben en `logs/app.log` o en el destino definido por `LOG_FILE`.
+2. **Logs funcionales en base de datos**: `actionLog.middleware.js` registra acciones HTTP en la tabla `logs` al finalizar la respuesta.
+
+El middleware sanitiza campos sensibles como:
 
 ```txt
-POST   /recurso
-PUT    /recurso/:id
-GET    /recurso/:id
-GET    /recurso
+password
+password_hash
+passwordHash
+token
+accessToken
+refreshToken
+authorization
 ```
 
-La excepción relevante es:
+`/health` se omite para no llenar logs con checks de disponibilidad.
+
+---
+
+## 14. Redis
+
+Redis está configurado en `core/redis/redis.config.js` y es opcional.
+
+- Si `REDIS_ENABLED=false`, el backend no intenta conectarse.
+- Si `REDIS_ENABLED=true` pero falta `REDIS_URL`, se registra warning y no conecta.
+- Si `REDIS_ENABLED=true` y `REDIS_URL` existe, intenta conectar al arrancar.
+
+Los helpers de cache están en:
 
 ```txt
-POST /api/publicaciones/con-imagenes
-```
-
-que crea una publicación y sus imágenes en una sola transacción.
-
-### Health
-
-```http
-GET /health
-```
-
-Respuesta:
-
-```json
-{
-  "ok": true,
-  "message": "Servidor funcionando correctamente"
-}
+src/shared/cache/cacheKeys.js
+src/shared/cache/redis.helper.js
 ```
 
 ---
 
-## 8. Detalle de endpoints por entidad
+## 15. Base de datos
 
-### Usuarios
+La conexión está en `core/db/db.config.js`.
 
-#### `POST /api/usuarios`
-
-Crea un usuario.
-
-Body esperado:
-
-```json
-{
-  "nombre": "Creador Demo",
-  "email": "creador@test.com",
-  "password_hash": "hash_seguro",
-  "rol": "CREADOR",
-  "url_imagen_portada": "https://example.com/portada.jpg",
-  "imagen_perfil": "https://example.com/perfil.jpg"
-}
-```
-
-Devuelve `data.id_usuario`.
-
-#### `PUT /api/usuarios/:id_usuario`
-
-Actualiza datos del usuario.
-
-Body ejemplo:
-
-```json
-{
-  "nombre": "Creador Demo Actualizado"
-}
-```
-
-#### `GET /api/usuarios/:id_usuario`
-
-Obtiene un usuario por ID.
-
-#### `GET /api/usuarios?limit=20&offset=0&search=demo`
-
-Lista usuarios con paginación y filtros.
-
----
-
-### Perfiles de creadores
-
-Base path:
+Los modelos Sequelize están distribuidos por módulo:
 
 ```txt
-/api/usuarios/perfiles-creadores
+src/modules/auth/model
+src/modules/usuarios/model
+src/modules/apoyos/model
+src/modules/publicaciones/model
 ```
 
-#### `POST /api/usuarios/perfiles-creadores`
-
-Body:
-
-```json
-{
-  "id_usuario": 1,
-  "nombre_publico": "Creador Demo",
-  "biografia": "Descripción pública",
-  "foto_perfil_url": "https://example.com/foto.jpg",
-  "banner_url": "https://example.com/banner.jpg"
-}
-```
-
-#### `PUT /api/usuarios/perfiles-creadores/:id_usuario`
-
-Body:
-
-```json
-{
-  "biografia": "Nueva biografía"
-}
-```
-
-#### `GET /api/usuarios/perfiles-creadores/:id_usuario`
-
-Obtiene el perfil del creador.
-
-#### `GET /api/usuarios/perfiles-creadores`
-
-Lista perfiles de creadores.
-
----
-
-### Perfiles de seguidores
-
-Base path:
+Las asociaciones se centralizan en:
 
 ```txt
-/api/usuarios/perfiles-seguidores
+core/db/db.associations.js
 ```
 
-#### `POST /api/usuarios/perfiles-seguidores`
-
-Body:
-
-```json
-{
-  "id_usuario": 2,
-  "nombre_visible": "Seguidor Demo"
-}
-```
-
-#### `PUT /api/usuarios/perfiles-seguidores/:id_usuario`
-
-Body:
-
-```json
-{
-  "nombre_visible": "Seguidor Actualizado"
-}
-```
-
-#### `GET /api/usuarios/perfiles-seguidores/:id_usuario`
-
-Obtiene perfil de seguidor.
-
-#### `GET /api/usuarios/perfiles-seguidores`
-
-Lista perfiles de seguidores.
-
----
-
-### Creadores favoritos
-
-Base path:
+Scripts SQL disponibles:
 
 ```txt
-/api/usuarios/creadores-favoritos
+docs/DB/DDL.sql
+docs/DB/patch.01.sql
 ```
-
-#### `POST /api/usuarios/creadores-favoritos`
-
-Body:
-
-```json
-{
-  "id_seguidor": 2,
-  "id_creador": 1
-}
-```
-
-Devuelve `data.id_favorito`.
-
-#### `PUT /api/usuarios/creadores-favoritos/:id_favorito`
-
-Body ejemplo:
-
-```json
-{
-  "estado_registro": "INACTIVO"
-}
-```
-
-#### `GET /api/usuarios/creadores-favoritos/:id_favorito`
-
-Obtiene favorito.
-
-#### `GET /api/usuarios/creadores-favoritos`
-
-Lista favoritos.
 
 ---
 
-### Creadores seguidos
-
-Base path:
+## 16. Estructura principal del proyecto
 
 ```txt
-/api/usuarios/creadores-seguidos
+OnlyFlansBackend/
+├─ app.js
+├─ server.js
+├─ package.json
+├─ yarn.lock
+├─ .env.example
+├─ core/
+│  ├─ db/
+│  ├─ jwt/
+│  ├─ redis/
+│  └─ sha2/
+├─ docs/
+│  ├─ DB/
+│  ├─ ROUTES DOCS/
+│  └─ TEST/
+├─ logs/
+├─ middlewares/
+└─ src/
+   ├─ modules/
+   │  ├─ auth/
+   │  ├─ usuarios/
+   │  ├─ apoyos/
+   │  └─ publicaciones/
+   └─ shared/
+      ├─ cache/
+      ├─ http/
+      ├─ repository/
+      ├─ service/
+      ├─ utils/
+      └─ validation/
 ```
 
-#### `POST /api/usuarios/creadores-seguidos`
-
-Body:
-
-```json
-{
-  "id_seguidor": 2,
-  "id_creador": 1
-}
-```
-
-Devuelve `data.id_seguimiento`.
-
-#### `PUT /api/usuarios/creadores-seguidos/:id_seguimiento`
-
-Body ejemplo:
-
-```json
-{
-  "estado_registro": "INACTIVO"
-}
-```
-
-#### `GET /api/usuarios/creadores-seguidos/:id_seguimiento`
-
-Obtiene seguimiento.
-
-#### `GET /api/usuarios/creadores-seguidos`
-
-Lista seguimientos.
+Cada carpeta relevante tiene su propio `README.md` para que un desarrollador pueda entrar por partes y entender qué hace cada sección.
 
 ---
 
-### Sesiones
+## 17. Cómo agregar una nueva entidad CRUD
 
-Base path:
-
-```txt
-/api/auth/sesiones
-```
-
-#### `POST /api/auth/sesiones`
-
-Body:
-
-```json
-{
-  "id_usuario": 1,
-  "ip": "127.0.0.1",
-  "user_agent": "Postman"
-}
-```
-
-Devuelve `data.id_sesion`.
-
-#### `PUT /api/auth/sesiones/:id_sesion`
-
-Body:
-
-```json
-{
-  "fecha_cierre": "2026-05-23T12:00:00.000Z"
-}
-```
-
-#### `GET /api/auth/sesiones/:id_sesion`
-
-Obtiene sesión.
-
-#### `GET /api/auth/sesiones`
-
-Lista sesiones.
+1. Crear modelo en `src/modules/<modulo>/model/<entidad>.model.js`.
+2. Importar el modelo en `core/db/db.associations.js`.
+3. Crear repository usando `createCrudRepository`.
+4. Crear service usando `createCrudService`.
+5. Crear schema Zod para `create`, `update`, `params` y `query`.
+6. Crear controller con `create`, `update`, `get`, `list`.
+7. Crear router y conectar validadores antes del controller.
+8. Montar el router en `src/modules/<modulo>/index.js`.
+9. Si es un módulo nuevo, agregarlo en `src/modules/index.js`.
+10. Probar con Postman/Bruno y revisar logs.
 
 ---
 
-### Logs
-
-Base path:
-
-```txt
-/api/auth/logs
-```
-
-#### `POST /api/auth/logs`
-
-Body:
-
-```json
-{
-  "id_sesion": 1,
-  "id_usuario": 1,
-  "accion": "TEST_LOG",
-  "metadata": {
-    "source": "postman"
-  }
-}
-```
-
-Devuelve `data.id_log`.
-
-#### `PUT /api/auth/logs/:id_log`
-
-Body:
-
-```json
-{
-  "accion": "TEST_LOG_UPDATED"
-}
-```
-
-#### `GET /api/auth/logs/:id_log`
-
-Obtiene log.
-
-#### `GET /api/auth/logs`
-
-Lista logs.
-
----
-
-### Tipos de apoyo
-
-Base path:
-
-```txt
-/api/apoyos/tipos
-```
-
-#### `POST /api/apoyos/tipos`
-
-Body:
-
-```json
-{
-  "codigo": "FLAN_TEST",
-  "nombre": "Flan Test",
-  "descripcion": "Tipo de apoyo de prueba",
-  "monto_unitario_bs": "10.00"
-}
-```
-
-Devuelve `data.id_tipo_apoyo`.
-
-#### `PUT /api/apoyos/tipos/:id_tipo_apoyo`
-
-Body:
-
-```json
-{
-  "nombre": "Flan Test Actualizado"
-}
-```
-
-#### `GET /api/apoyos/tipos/:id_tipo_apoyo`
-
-Obtiene tipo de apoyo.
-
-#### `GET /api/apoyos/tipos`
-
-Lista tipos de apoyo.
-
----
-
-### Metas de apoyo
-
-Base path:
-
-```txt
-/api/apoyos/metas
-```
-
-#### `POST /api/apoyos/metas`
-
-Body:
-
-```json
-{
-  "id_creador": 1,
-  "titulo": "Meta de prueba",
-  "descripcion": "Descripción de la meta"
-}
-```
-
-Devuelve `data.id_meta`.
-
-#### `PUT /api/apoyos/metas/:id_meta`
-
-Body:
-
-```json
-{
-  "titulo": "Meta actualizada"
-}
-```
-
-#### `GET /api/apoyos/metas/:id_meta`
-
-Obtiene meta.
-
-#### `GET /api/apoyos/metas`
-
-Lista metas.
-
----
-
-### Apoyos
-
-Base path:
-
-```txt
-/api/apoyos
-```
-
-#### `POST /api/apoyos`
-
-Body:
-
-```json
-{
-  "id_seguidor": 2,
-  "id_creador": 1,
-  "id_tipo_apoyo": 1,
-  "cantidad": 2,
-  "monto_unitario_bs": "10.00",
-  "mensaje": "Excelente contenido",
-  "estado_pago": "SIMULADO_APROBADO"
-}
-```
-
-Devuelve `data.id_apoyo` y la DB calcula `monto_total_bs`.
-
-#### `PUT /api/apoyos/:id_apoyo`
-
-Body:
-
-```json
-{
-  "mensaje": "Mensaje actualizado"
-}
-```
-
-#### `GET /api/apoyos/:id_apoyo`
-
-Obtiene apoyo.
-
-#### `GET /api/apoyos`
-
-Lista apoyos.
-
----
-
-### Publicaciones
-
-Base path:
-
-```txt
-/api/publicaciones
-```
-
-#### `POST /api/publicaciones`
-
-Crea una publicación solo-texto.
-
-Body:
-
-```json
-{
-  "id_creador": 1,
-  "texto": "Primera publicación de prueba"
-}
-```
-
-Devuelve `data.id_publicacion`.
-
-#### `POST /api/publicaciones/con-imagenes`
-
-Crea una publicación y sus imágenes en una transacción.
-
-Body:
-
-```json
-{
-  "id_creador": 1,
-  "texto": "Publicación con imágenes",
-  "imagenes": [
-    {
-      "link_imagen": "https://example.com/imagen-1.jpg",
-      "orden": 1
-    },
-    {
-      "link_imagen": "https://example.com/imagen-2.jpg",
-      "orden": 2
-    }
-  ]
-}
-```
-
-Respuesta esperada:
-
-```json
-{
-  "success": true,
-  "message": "Publicación creada con imágenes correctamente.",
-  "data": {
-    "id_publicacion": 1,
-    "id_creador": 1,
-    "texto": "Publicación con imágenes",
-    "imagenes": []
-  }
-}
-```
-
-#### `PUT /api/publicaciones/:id_publicacion`
-
-Body:
-
-```json
-{
-  "texto": "Texto actualizado"
-}
-```
-
-#### `GET /api/publicaciones/:id_publicacion`
-
-Obtiene publicación.
-
-#### `GET /api/publicaciones`
-
-Lista publicaciones.
-
----
-
-### Imágenes de publicación
-
-Base path:
-
-```txt
-/api/publicaciones/imagenes
-```
-
-#### `POST /api/publicaciones/imagenes`
-
-Body:
-
-```json
-{
-  "id_publicacion": 1,
-  "link_imagen": "https://example.com/extra.jpg",
-  "orden": 3
-}
-```
-
-Devuelve `data.id_publicacion_imagen`.
-
-#### `PUT /api/publicaciones/imagenes/:id_publicacion_imagen`
-
-Body:
-
-```json
-{
-  "orden": 4
-}
-```
-
-#### `GET /api/publicaciones/imagenes/:id_publicacion_imagen`
-
-Obtiene imagen.
-
-#### `GET /api/publicaciones/imagenes`
-
-Lista imágenes.
-
----
-
-### Comentarios de publicación
-
-Base path:
-
-```txt
-/api/publicaciones/comentarios
-```
-
-#### `POST /api/publicaciones/comentarios`
-
-Body:
-
-```json
-{
-  "id_publicacion": 1,
-  "id_seguidor": 2,
-  "comentario": "Buen contenido"
-}
-```
-
-Devuelve `data.id_comentario`.
-
-#### `PUT /api/publicaciones/comentarios/:id_comentario`
-
-Body:
-
-```json
-{
-  "comentario": "Comentario actualizado"
-}
-```
-
-#### `GET /api/publicaciones/comentarios/:id_comentario`
-
-Obtiene comentario.
-
-#### `GET /api/publicaciones/comentarios`
-
-Lista comentarios.
-
----
-
-## 9. Cómo correr localmente
-
-Instalar dependencias:
-
-```bash
-npm install
-```
-
-Crear `.env`:
-
-```bash
-cp .env.example .env
-```
-
-Ajustar conexión PostgreSQL/Neon en `.env`.
-
-Levantar servidor:
-
-```bash
-npm run dev
-```
-
-Probar health:
-
-```http
-GET http://localhost:3000/health
-```
-
----
-
-## 10. Revisión realizada antes del testing
-
-Se corrigió lo siguiente:
-
-1. Los services ya no repiten validaciones que corresponden al middleware Zod.
-2. `createCrudService` queda como service global de coordinación CRUD y manejo de errores, no como validador de request.
-3. Se corrigió `getUserId.js`, que tenía un `return 18` hardcodeado.
-4. JWT y `jwtMiddleware` fueron alineados a `id_usuario`, no a `id_persona` de proyectos anteriores.
-5. `POST /api/publicaciones` ahora exige `texto`, para evitar publicaciones vacías.
-6. `POST /api/publicaciones/con-imagenes` mantiene validación Zod y crea publicación + imágenes en transacción.
-7. `package.json` ahora incluye scripts y dependencias necesarias.
-8. `.env.example` fue alineado a las variables reales usadas por `db.config.js`.
-9. Se agregó colección Postman para probar el flujo completo y todos los endpoints.
-
+## 18. Reglas importantes del backend
+
+- No subir `node_modules` al repositorio.
+- No subir `.env` al repositorio.
+- Usar Yarn como gestor principal.
+- Crear usuarios desde `auth`, no desde `usuarios`.
+- No exponer sesiones/logs como endpoints públicos salvo que se decida explícitamente.
+- Validar requests en router con Zod.
+- No repetir validaciones de forma en service.
+- Mantener reglas transaccionales en service/repository.
+- Mantener acceso a base de datos dentro de repository.
+- Mantener modelos alineados al DDL real.
+- Usar cookies HTTP-only para auth web.
+- Revisar `docs/ROUTES DOCS/ROUTES_ALL_MODULES.md` para una matriz completa de endpoints.
