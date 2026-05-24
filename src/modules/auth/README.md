@@ -70,3 +70,19 @@ Pero no existen rutas montadas para `/api/auth/sesiones` ni `/api/auth/logs`. Se
 - abrir/cerrar sesiones al hacer login/logout;
 - registrar acciones de usuario y acciones HTTP;
 - validar sesión activa desde `requireAuth`.
+
+<!-- FUNCTION_DOCS_START -->
+## Explicación de funciones y comportamiento del código
+
+Esta sección documenta los archivos JavaScript directos de `src/modules/auth`. La intención es que un desarrollador nuevo entienda qué hace cada función, qué recibe y por qué está separada en esta capa.
+
+### `index.js`
+
+Este archivo no define funciones; exporta la configuración que `app.js` usa para montar el módulo.
+
+| Export | Qué hace | Por qué existe |
+|---|---|---|
+| `moduleName` | Nombre lógico del módulo. | Permite construir rutas y logs consistentes. |
+| `basePath` | Ruta base bajo `/api/...`. | Evita hardcodear rutas en `app.js`. |
+| `router` | Router Express agregado del módulo. | Centraliza endpoints del módulo. |
+<!-- FUNCTION_DOCS_END -->

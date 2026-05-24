@@ -41,3 +41,23 @@ GET  /api/auth/me
 ## Por qué existe
 
 El router mantiene el contrato HTTP separado del controller. Aquí se decide qué endpoint existe y qué validación/protección debe pasar antes de ejecutar lógica.
+
+<!-- FUNCTION_DOCS_START -->
+## Explicación de funciones y comportamiento del código
+
+Esta sección documenta los archivos JavaScript directos de `src/modules/auth/router`. La intención es que un desarrollador nuevo entienda qué hace cada función, qué recibe y por qué está separada en esta capa.
+
+### `auth.router.js`
+
+Este archivo no contiene reglas de negocio; conecta endpoints HTTP con validadores y controller.
+
+| Método | Ruta local | Protegida | Validación aplicada | Controller final |
+|---|---|---|---|---|
+| POST | /registro/creador | no | validateBody(registrarCreadorSchema) | AuthController.registerCreator |
+| POST | /registro/seguidor | no | validateBody(registrarSeguidorSchema) | AuthController.registerFollower |
+| POST | /login | no | validateBody(loginSchema) | AuthController.login |
+| POST | /logout | sí | sin validación local | AuthController.logout |
+| GET | /me | sí | sin validación local | AuthController.me |
+
+Por qué existe: mantiene la definición HTTP separada de la lógica de negocio. El router decide qué se valida y qué controller atiende; el controller no debería validar manualmente el body/params/query.
+<!-- FUNCTION_DOCS_END -->

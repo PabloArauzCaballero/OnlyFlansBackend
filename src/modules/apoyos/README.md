@@ -44,3 +44,19 @@ GET  /api/apoyos
 ## Regla importante
 
 `monto_total_bs` no debe recibirse desde el cliente. Es una columna calculada por base de datos como `cantidad * monto_unitario_bs`.
+
+<!-- FUNCTION_DOCS_START -->
+## Explicación de funciones y comportamiento del código
+
+Esta sección documenta los archivos JavaScript directos de `src/modules/apoyos`. La intención es que un desarrollador nuevo entienda qué hace cada función, qué recibe y por qué está separada en esta capa.
+
+### `index.js`
+
+Este archivo no define funciones; exporta la configuración que `app.js` usa para montar el módulo.
+
+| Export | Qué hace | Por qué existe |
+|---|---|---|
+| `moduleName` | Nombre lógico del módulo. | Permite construir rutas y logs consistentes. |
+| `basePath` | Ruta base bajo `/api/...`. | Evita hardcodear rutas en `app.js`. |
+| `router` | Router Express agregado del módulo. | Centraliza endpoints del módulo. |
+<!-- FUNCTION_DOCS_END -->

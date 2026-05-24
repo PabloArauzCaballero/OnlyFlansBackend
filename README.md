@@ -725,3 +725,40 @@ Cada carpeta relevante tiene su propio `README.md` para que un desarrollador pue
 - Mantener modelos alineados al DDL real.
 - Usar cookies HTTP-only para auth web.
 - Revisar `docs/ROUTES DOCS/ROUTES_ALL_MODULES.md` para una matriz completa de endpoints.
+
+<!-- FUNCTION_DOCS_START -->
+## Explicación de funciones y comportamiento del código
+
+Esta sección documenta los archivos JavaScript directos de `raíz del proyecto`. La intención es que un desarrollador nuevo entienda qué hace cada función, qué recibe y por qué está separada en esta capa.
+
+### `app.js`: configuración central de Express
+
+Este archivo no define funciones de negocio, pero sí arma el pipeline global por el que pasa cada request.
+
+| Bloque | Qué hace | Por qué existe |
+|---|---|---|
+| `app.disable("x-powered-by")` | Oculta la cabecera que delata que el servidor usa Express. | Reduce exposición innecesaria de información técnica. |
+| `pinoHttp(...)` | Agrega logging HTTP y genera `req.id` con `x-request-id` o `Date.now()`. | Permite rastrear requests y correlacionar logs. |
+| `helmet(...)` | Aplica cabeceras de seguridad HTTP. | Mejora seguridad por defecto sin tener que configurar cada ruta. |
+| `compression(...)` | Comprime respuestas mayores a 1024 bytes, salvo header `x-no-compression`. | Reduce peso de respuestas y permite desactivar compresión en casos puntuales. |
+| `cors(...)` | Valida origen contra `CORS_ORIGINS` y permite credenciales. | Controla qué frontends pueden consumir la API con cookies. |
+| `rateLimit(...)` | Limita requests globales, saltando `/api/auth`. | Protege contra abuso básico sin bloquear el flujo de autenticación. |
+| `cookieParser()` | Lee cookies y las deja en `req.cookies`. | Necesario para obtener `access_token` en `requireAuth`. |
+| `express.json/urlencoded` | Parsea bodies JSON y formularios. | Permite que controllers lean `req.body`. |
+| `GET /health` | Endpoint simple de estado del servidor. | Sirve para monitoreo, Render/health checks y pruebas rápidas. |
+| `REQUEST HIT log` | Registra método y URL antes de entrar a rutas. | Ayuda a saber si una solicitud llegó al backend. |
+| `actionLogMiddleware` | Registra auditoría después de cada respuesta. | Se coloca antes de los routers para auditar la mayoría de acciones. |
+| Montaje de `src/modules` | Recorre módulos y hace `app.use(route, router)`. | Permite agregar módulos mediante configuración, sin tocar `app.js` cada vez. |
+| Handler `404` | Responde cuando ninguna ruta coincidió. | Evita respuestas vacías o ambiguas ante rutas inexistentes. |
+| Handler global de errores | Captura errores no manejados de Express. | Centraliza respuesta 500 y logging con stack trace. |
+
+
+### `server.js`: arranque y apagado controlado
+
+| Función | Qué hace | Recibe | Devuelve / efecto | Por qué existe |
+|---|---|---|---|---|
+| `bootstrap()` | Carga variables `.env`, conecta PostgreSQL, conecta Redis si está habilitado y levanta Express en `PORT`. | No recibe parámetros directos; usa variables de entorno. | Inicia el servidor o termina el proceso con código `1` si falla. | Separa la configuración de la app (`app.js`) del ciclo de vida real del proceso. |
+| `shutdown(signal)` | Cierra el servidor HTTP y luego la conexión de base de datos. | Señal del sistema (`SIGTERM` o `SIGINT`). | Finaliza el proceso con código `0`. | Evita cortar el proceso de golpe y deja conexiones limpias al apagar o redeployar. |
+
+> Nota: `disconnectRedis` está importado, pero actualmente no se llama dentro de `shutdown`. Si se quiere cerrar Redis explícitamente, puede agregarse `await disconnectRedis()` antes de `process.exit(0)`.
+<!-- FUNCTION_DOCS_END -->

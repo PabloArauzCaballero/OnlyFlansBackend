@@ -8,6 +8,7 @@ Esta carpeta contiene infraestructura base del backend. Aquí no deberían vivir
 |---|---|---|
 | `db/` | Configuración Sequelize y asociaciones entre modelos. | `server.js`, repositories y modelos. |
 | `jwt/` | Generación y verificación de tokens JWT. | Auth service y `jwtMiddleware`. |
+| `redis/` | Conexión opcional a Redis. | `server.js` y helpers de cache. |
 | `sha2/` | Helper simple de hash SHA-256. | Código que necesite hashing no relacionado con password. |
 
 ## Responsabilidad
@@ -16,6 +17,7 @@ Esta carpeta contiene infraestructura base del backend. Aquí no deberían vivir
 
 - ¿Cómo conecto a la base de datos?
 - ¿Cómo genero/verifico JWT?
+- ¿Cómo conecto Redis?
 - ¿Dónde se declaran asociaciones Sequelize?
 
 No debe responder preguntas de negocio como:
@@ -25,3 +27,11 @@ No debe responder preguntas de negocio como:
 - ¿Qué validaciones tiene un apoyo?
 
 Esas decisiones pertenecen a `src/modules` y `src/shared`.
+
+<!-- FUNCTION_DOCS_START -->
+## Explicación de funciones y comportamiento del código
+
+Esta sección documenta los archivos JavaScript directos de `core`. La intención es que un desarrollador nuevo entienda qué hace cada función, qué recibe y por qué está separada en esta capa.
+
+Esta carpeta no contiene archivos `.js` directos. Su README documenta estructura, SQL, pruebas o subcarpetas. Para funciones de código, revisar los README de las subcarpetas correspondientes.
+<!-- FUNCTION_DOCS_END -->

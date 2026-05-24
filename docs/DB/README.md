@@ -28,3 +28,11 @@ Los modelos en `src/modules/*/model` deben reflejar estas tablas. Si cambias una
 - schema Zod;
 - repository/service si afecta lógica;
 - documentación de rutas si cambia el payload.
+
+<!-- FUNCTION_DOCS_START -->
+## Explicación de funciones y comportamiento del código
+
+Esta sección documenta los archivos JavaScript directos de `docs/DB`. La intención es que un desarrollador nuevo entienda qué hace cada función, qué recibe y por qué está separada en esta capa.
+
+Esta carpeta no contiene archivos `.js` directos. Su README documenta estructura, SQL, pruebas o subcarpetas. Para funciones de código, revisar los README de las subcarpetas correspondientes.
+<!-- FUNCTION_DOCS_END -->
